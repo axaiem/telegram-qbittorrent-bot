@@ -29,7 +29,7 @@ A lightweight Telegram bot built with Python that connects to your local or remo
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/<your-username>/telegram-qbittorrent-bot.git
+   git clone https://github.com/axaiem/telegram-qbittorrent-bot.git
    cd telegram-qbittorrent-bot
    ```
 
