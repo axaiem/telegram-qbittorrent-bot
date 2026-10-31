@@ -1,10 +1,25 @@
 import os
 import sys
-import asyncio
+import fcntl
+import tempfile
 import logging
-from telegram import Update, request
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from qbittorrentapi import Client
+from telegram import request
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+)
+from src.config import TELEGRAM_BOT_TOKEN
+from src.services.qbittorrent_service import ensure_qbt_login
+from src.handlers.telegram_handlers import (
+    start_handler,
+    search_movie_handler,
+    torrent_selection_callback,
+    message_handler,
+    document_handler,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -12,80 +27,69 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from dotenv import load_dotenv
+import signal
+import time
 
-# Load variables from local .env (if present) and ~/.zshrc
-load_dotenv()  # looks for .env in current directory
-load_dotenv(os.path.expanduser("~/.zshrc"), verbose=False)
+# Single instance lock mechanism
+_lock_file = None
 
-# Configuration (read from .env / ~/.zshrc or environment)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-QBITTORRENT_HOST = os.getenv("QBITTORRENT_HOST", "http://localhost:8080")
-QBITTORRENT_USER = os.getenv("QBIT_TORRENT_USER", os.getenv("QBITTORRENT_USER", "admin"))
-QBITTORRENT_PASS = os.getenv("QBIT_TORRENT_PASS_ADMIN", os.getenv("QBITTORRENT_PASS", ""))
+def acquire_instance_lock():
+    """Ensures only one bot instance runs by terminating any previously running instance."""
+    global _lock_file
+    lock_file_path = os.path.join(tempfile.gettempdir(), "telegram_qbittorrent_bot.lock")
 
-allowed_user_id_raw = os.getenv("TELEGRAM_USER_ID", os.getenv("ALLOWED_USER_ID", "0"))
-ALLOWED_USER_ID = int(allowed_user_id_raw) if allowed_user_id_raw and allowed_user_id_raw.isdigit() else 0
-
-# Initialize qBittorrent client
-qbt_client = Client(host=QBITTORRENT_HOST, username=QBITTORRENT_USER, password=QBITTORRENT_PASS)
-
-def ensure_qbt_login():
-    """Ensure connection to qBittorrent Web UI."""
-    try:
-        qbt_client.auth_log_in()
-        return True
-    except Exception as e:
-        logger.warning(f"Could not connect to qBittorrent: {e}")
-        return False
-
-# Initial login check
-ensure_qbt_login()
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ALLOWED_USER_ID:
-        await update.message.reply_text("Unauthorized access.")
-        return
-    await update.message.reply_text("Send me a magnet link or a .torrent file to start downloading!")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ALLOWED_USER_ID:
-        return
-
-    text = update.message.text
-    if text and text.startswith("magnet:?"):
-        ensure_qbt_login()
+    for attempt in range(5):
         try:
-            # Run blocking qBittorrent API calls in a separate thread to keep bot responsive
-            res = await asyncio.to_thread(qbt_client.torrents_add, urls=text)
-            if res == "Ok.":
-                await update.message.reply_text("✅ Magnet link added to qBittorrent download queue!")
+            # Open file in r+ mode if it exists, or create it if not
+            if not os.path.exists(lock_file_path):
+                _lock_file = open(lock_file_path, "w+")
             else:
-                await update.message.reply_text(f"⚠️ Response from qBittorrent: {res}")
-        except Exception as e:
-            await update.message.reply_text(f"❌ Error adding magnet link: {e}")
+                _lock_file = open(lock_file_path, "r+")
 
-async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ALLOWED_USER_ID:
-        return
+            # Try to acquire non-blocking lock
+            fcntl.flock(_lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-    doc = update.message.document
-    if doc and doc.file_name and doc.file_name.endswith(".torrent"):
-        ensure_qbt_login()
-        try:
-            file = await context.bot.get_file(doc.file_id)
-            file_bytes = await file.download_as_bytearray()
-            res = await asyncio.to_thread(
-                qbt_client.torrents_add, torrent_files=bytes(file_bytes)
-            )
-            if res == "Ok.":
-                await update.message.reply_text("✅ .torrent file uploaded and added to downloads!")
-            else:
-                await update.message.reply_text(f"⚠️ Response from qBittorrent: {res}")
-        except Exception as e:
-            await update.message.reply_text(f"❌ Error adding .torrent file: {e}")
+            # Successfully locked, write current PID
+            _lock_file.seek(0)
+            _lock_file.truncate()
+            _lock_file.write(str(os.getpid()))
+            _lock_file.flush()
+            return
 
-if __name__ == "__main__":
+        except (IOError, BlockingIOError):
+            # Another process holds the lock
+            try:
+                with open(lock_file_path, "r") as f:
+                    content = f.read().strip()
+                if content.isdigit():
+                    old_pid = int(content)
+                    if old_pid != os.getpid():
+                        logger.warning(
+                            f"Existing bot instance found (PID: {old_pid}). Terminating it to take over..."
+                        )
+                        print(f"⚠️ Terminating existing bot instance (PID: {old_pid})...")
+                        os.kill(old_pid, signal.SIGTERM)
+                        # Wait briefly for process to exit and release lock
+                        time.sleep(1.0)
+                        # If still alive after SIGTERM, send SIGKILL
+                        try:
+                            os.kill(old_pid, 0)
+                            os.kill(old_pid, signal.SIGKILL)
+                            time.sleep(0.5)
+                        except OSError:
+                            pass
+            except ProcessLookupError:
+                pass
+            except Exception as e:
+                logger.debug(f"Error while terminating old process: {e}")
+                time.sleep(0.5)
+
+    print("\n❌ Error: Could not acquire bot instance lock after terminating previous process.")
+    sys.exit(1)
+
+def main():
+    acquire_instance_lock()
+
     if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN":
         print(
             "\n❌ Error: TELEGRAM_BOT_TOKEN is missing or not set!\n"
@@ -95,7 +99,10 @@ if __name__ == "__main__":
         )
         sys.exit(1)
 
-    # Increase network timeouts to prevent premature TimedOut errors
+    # Pre-check qBittorrent connection
+    ensure_qbt_login()
+
+    # Network timeout configuration
     t_request = request.HTTPXRequest(
         connection_pool_size=8,
         connect_timeout=30.0,
@@ -104,9 +111,18 @@ if __name__ == "__main__":
     )
 
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).request(t_request).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    
+
+    # Register handlers
+    app.add_handler(CommandHandler("start", start_handler))
+    app.add_handler(CommandHandler("help", start_handler))
+    app.add_handler(CommandHandler("search", search_movie_handler))
+    app.add_handler(CommandHandler("movie", search_movie_handler))
+    app.add_handler(CallbackQueryHandler(torrent_selection_callback, pattern=r"^dl:"))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
+    app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
+
     print("Bot is running...")
     app.run_polling()
+
+if __name__ == "__main__":
+    main()
