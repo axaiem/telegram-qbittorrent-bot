@@ -95,19 +95,31 @@ async def search_movie_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 keyboard.append(row)
 
         reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-        caption = (
-            f"🎬 *{movie.title}* ({movie.year})\n"
-            f"⭐ Rating: {movie.rating}/10\n"
-            f"{('📝 ' + movie.summary[:150] + '...') if movie.summary else ''}"
-        )
+        
+        caption_lines = [f"🎬 *{movie.title}*"]
+        if movie.year:
+            caption_lines[0] += f" ({movie.year})"
+        if movie.rating > 0.0:
+            caption_lines.append(f"⭐ Rating: {movie.rating}/10")
+        if movie.summary:
+            caption_lines.append(f"📝 {movie.summary[:150]}")
         if not keyboard:
-            caption += "\n⚠️ _No torrent links available for this title._"
+            caption_lines.append("⚠️ _No torrent links available for this title._")
 
-        await update.message.reply_text(
-            caption,
-            reply_markup=reply_markup,
-            parse_mode="Markdown"
-        )
+        caption = "\n".join(caption_lines)
+
+        try:
+            await update.message.reply_text(
+                caption,
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+        except Exception:
+            # Fallback to plain text if title contains unescaped markdown characters
+            await update.message.reply_text(
+                caption.replace("*", "").replace("_", ""),
+                reply_markup=reply_markup
+            )
 
 async def torrent_selection_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle callback button clicks when user selects a torrent option."""
