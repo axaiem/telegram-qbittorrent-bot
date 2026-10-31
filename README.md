@@ -6,10 +6,11 @@ A lightweight Telegram bot built with Python that connects to your local or remo
 
 ## Features
 
+- 🔍 **Movie Search (YTS)**: Search for movies via `/search <name>` or `/movie <name>`, view up to 5 results with details, and tap a quality option button to queue the magnet link directly.
 - 🧲 **Magnet Links**: Automatically extracts and queues magnet links sent in chat.
 - 📁 **.torrent File Support**: Download and queue torrent files sent as documents.
 - 🔒 **User Authorization**: Restricts bot usage to a specific Telegram user ID.
-- ⚡ **Non-Blocking Architecture**: Handles qBittorrent API calls asynchronously via thread pools to ensure uninterrupted bot responsiveness.
+- ⚡ **Non-Blocking Architecture**: Handles qBittorrent and HTTP search API calls asynchronously to ensure uninterrupted bot responsiveness.
 - 🔑 **Flexible Environment Configuration**: Automatically loads credentials from local `.env` files, environment variables, or your shell profile (`~/.zshrc`).
 
 ---
@@ -74,6 +75,7 @@ python3 bot.py
 ```
 
 Then in Telegram:
-1. Send `/start` to verify connectivity.
-2. Send any magnet link starting with `magnet:?`.
-3. Or attach/forward any `.torrent` file.
+1. Send `/start` to verify connectivity and see available commands.
+2. Search movies with `/search <title>` (e.g. `/search Inception`) and click any quality button (`720p`, `1080p`, etc.) to queue it.
+3. Send any magnet link starting with `magnet:?`.
+4. Or attach/forward any `.torrent` file.
