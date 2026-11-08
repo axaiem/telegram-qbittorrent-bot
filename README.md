@@ -34,14 +34,15 @@ A lightweight Telegram bot built with Python that connects to your local or remo
    cd telegram-qbittorrent-bot
    ```
 
-2. **Create a virtual environment (optional but recommended):**
+2. **Install and sync dependencies with `uv` (Recommended):**
+   ```bash
+   uv sync
+   ```
+
+   *(Alternative with traditional `venv` and `pip`:)*
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
-   ```
-
-3. **Install dependencies:**
-   ```bash
    pip install -r requirements.txt
    ```
 
@@ -69,10 +70,12 @@ QBIT_TORRENT_PASS_ADMIN="your_password"
 
 ## Usage
 
-Start the bot:
+Start the bot with `uv`:
 ```bash
-python3 bot.py
+uv run python bot.py
 ```
+
+*(Or within an activated virtual environment: `python3 bot.py`)*
 
 Then in Telegram:
 1. Send `/start` to verify connectivity and see available commands.
