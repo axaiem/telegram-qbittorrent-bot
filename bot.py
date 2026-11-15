@@ -19,6 +19,10 @@ from src.handlers.telegram_handlers import (
     torrent_selection_callback,
     message_handler,
     document_handler,
+    status_handler,
+    pause_all_handler,
+    resume_all_handler,
+    qbt_action_callback,
 )
 
 # Configure logging
@@ -117,7 +121,13 @@ def main():
     app.add_handler(CommandHandler("help", start_handler))
     app.add_handler(CommandHandler("search", search_movie_handler))
     app.add_handler(CommandHandler("movie", search_movie_handler))
+    app.add_handler(CommandHandler("status", status_handler))
+    app.add_handler(CommandHandler("torrents", status_handler))
+    app.add_handler(CommandHandler("list", status_handler))
+    app.add_handler(CommandHandler("pause_all", pause_all_handler))
+    app.add_handler(CommandHandler("resume_all", resume_all_handler))
     app.add_handler(CallbackQueryHandler(torrent_selection_callback, pattern=r"^dl:"))
+    app.add_handler(CallbackQueryHandler(qbt_action_callback, pattern=r"^qbt:"))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, document_handler))
 
