@@ -6,6 +6,10 @@ A lightweight Telegram bot built with Python that connects to your local or remo
 
 ## Features
 
+- 📊 **Torrent Status & Control**: View all active or queued torrents via `/status`, `/torrents`, or `/list` with progress bars, speeds, sizes, and ETAs.
+- ⏯️ **Interactive Management**: Pause, resume, and discard/delete torrents directly from Telegram inline buttons without typing hashes or commands.
+- 🗑️ **Safe Deletion Options**: Choose between removing the torrent metadata from the client while preserving downloaded files or permanently deleting files from disk.
+- ⏸️ **Bulk Controls**: Pause or resume all torrents simultaneously with `/pause_all`, `/resume_all`, or list view inline buttons.
 - 🔍 **Movie Search (YTS)**: Search for movies via `/search <name>` or `/movie <name>`, view up to 5 results with details, and tap a quality option button to queue the magnet link directly.
 - 🧲 **Magnet Links**: Automatically extracts and queues magnet links sent in chat.
 - 📁 **.torrent File Support**: Download and queue torrent files sent as documents.
@@ -79,6 +83,8 @@ uv run python bot.py
 
 Then in Telegram:
 1. Send `/start` to verify connectivity and see available commands.
-2. Search movies with `/search <title>` (e.g. `/search Inception`) and click any quality button (`720p`, `1080p`, etc.) to queue it.
-3. Send any magnet link starting with `magnet:?`.
-4. Or attach/forward any `.torrent` file.
+2. Check your torrents with `/status` or `/torrents` to view progress bars, speeds, and interact (pause, resume, discard/delete).
+3. Search movies with `/search <title>` (e.g. `/search Inception`) and click any quality button (`720p`, `1080p`, etc.) to queue it.
+4. Send any magnet link starting with `magnet:?`.
+5. Or attach/forward any `.torrent` file.
+6. Use `/pause_all` or `/resume_all` for quick bulk control.
